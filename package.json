@@ -1,0 +1,46 @@
+{
+  "name": "@rexxars/k8s-mdns",
+  "version": "1.0.0",
+  "description": "Daemon that announces mdns records for services found in kubernetes",
+  "main": "lib/index.js",
+  "private": true,
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx src/daemon.ts | pino-pretty",
+    "start": "node lib/daemon.js",
+    "test": "echo \"No test specified\""
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+ssh://git@github.com/rexxars/k8s-mdns.git"
+  },
+  "author": "Espen Hovlandsdal <espen@hovlandsdal.com>",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/rexxars/k8s-mdns/issues"
+  },
+  "homepage": "https://github.com/rexxars/k8s-mdns#readme",
+  "dependencies": {
+    "@kubernetes/client-node": "^0.18.1",
+    "multicast-dns": "^7.2.5",
+    "pino": "^8.15.1"
+  },
+  "devDependencies": {
+    "@types/dns-packet": "^5.6.0",
+    "@types/node": "^20.6.1",
+    "@typescript-eslint/eslint-plugin": "^6.7.0",
+    "@typescript-eslint/parser": "^6.7.0",
+    "eslint": "^8.48.0",
+    "eslint-config-prettier": "^9.0.0",
+    "eslint-config-sanity": "^6.0.0",
+    "pino-pretty": "^10.2.0",
+    "prettier": "^3.0.3",
+    "tsx": "^3.12.10",
+    "typescript": "^5.2.2"
+  },
+  "prettier": {
+    "semi": false,
+    "singleQuote": true,
+    "bracketSpacing": false
+  }
+}
