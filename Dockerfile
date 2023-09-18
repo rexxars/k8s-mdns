@@ -13,7 +13,7 @@ RUN npm ci
 COPY src src
 
 # Build for production and remove dev dependencies
-RUN npm run build && npm prune --production
+RUN npm run build && npm prune --omit=dev
 
 # Run with source maps so we can trace things back to the original source
 CMD [ "node", "--enable-source-maps", "lib/daemon.js" ]
