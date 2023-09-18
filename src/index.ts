@@ -3,6 +3,8 @@ import {
   CoreV1Api,
   KubeConfig,
   makeInformer,
+  NetworkingV1Api,
+  type V1Ingress,
   type V1Node,
   type V1Service,
 } from '@kubernetes/client-node'
@@ -14,7 +16,9 @@ export function createDaemon(): {
   start: () => Promise<void>
   stop: () => Promise<void>
 } {
-  const serviceMap = new Map<string, string>()
+  // Key: service name/ingress host, value: node IP
+  const routingRules = new Map<string, string>()
+  const ingresses = new Map<string, Set<string>>()
   const nodeIPs = new Set<string>()
   const serviceNames = new Set<string>()
 
@@ -28,6 +32,7 @@ export function createDaemon(): {
   let mdns: MulticastDns | undefined
 
   const k8sApi = kc.makeApiClient(CoreV1Api)
+  const k8sNetApi = kc.makeApiClient(NetworkingV1Api)
 
   const serviceInformer = makeInformer(
     kc,
@@ -103,9 +108,55 @@ export function createDaemon(): {
     nodeInformer.start()
   })
 
+  const ingressInformer = makeInformer(
+    kc,
+    '/apis/networking.k8s.io/v1/ingresses',
+    () => k8sNetApi.listIngressForAllNamespaces(),
+  )
+
+  ingressInformer.on('add', (ingress: V1Ingress) => {
+    const ingressName = ingress.metadata?.name || ''
+    const rules = ingress.spec?.rules || []
+    if (!ingressName || rules.length === 0) {
+      return
+    }
+
+    const hosts = new Set<string>()
+    for (const rule of rules) {
+      if (!rule.host || rule.host?.includes('*')) {
+        continue
+      }
+
+      logger.info('Ingress rule discovered for host: %s', rule.host)
+      hosts.add(rule.host)
+    }
+
+    ingresses.set(ingressName, hosts)
+
+    rebalanceServices()
+  })
+
+  ingressInformer.on('delete', (ingress: V1Ingress) => {
+    const ingressName = ingress.metadata?.name || ''
+    if (!ingressName) {
+      return
+    }
+
+    logger.info('Ingress removed: %s', ingressName)
+    ingresses.delete(ingressName)
+
+    rebalanceServices()
+  })
+
+  ingressInformer.on('error', (err: unknown) => {
+    logger.error(err)
+
+    ingressInformer.start()
+  })
+
   function rebalanceServices() {
     if (serviceNames.size === 0 || nodeIPs.size === 0) {
-      serviceMap.clear()
+      routingRules.clear()
       return
     }
 
@@ -115,7 +166,17 @@ export function createDaemon(): {
     let nodeIndex = 0
     for (const serviceName of services) {
       const node = nodes[nodeIndex] || ''
-      serviceMap.set(serviceName, node)
+      routingRules.set(serviceName, node)
+
+      if (++nodeIndex >= nodes.length) {
+        nodeIndex = 0
+      }
+    }
+
+    const ingressHosts = new Set(...ingresses.values())
+    for (const ingressHost of ingressHosts) {
+      const node = nodes[nodeIndex] || ''
+      routingRules.set(ingressHost, node)
 
       if (++nodeIndex >= nodes.length) {
         nodeIndex = 0
@@ -142,6 +203,7 @@ export function createDaemon(): {
           started = true
 
           serviceInformer.start()
+          ingressInformer.start()
           nodeInformer.start()
           resolve()
         })
@@ -152,7 +214,10 @@ export function createDaemon(): {
             }
 
             const serviceName = question.name.replace(/\.local$/, '')
-            const nodeIP = serviceMap.get(serviceName)
+            const ingressHost = question.name
+            const nodeIP =
+              routingRules.get(serviceName) || routingRules.get(ingressHost)
+
             if (!nodeIP) {
               return
             }
@@ -190,6 +255,7 @@ export function createDaemon(): {
     await Promise.all([
       nodeInformer.stop(),
       serviceInformer.stop(),
+      ingressInformer.stop(),
       promisify(mdns.destroy)(),
     ])
   }
