@@ -6,6 +6,8 @@ You probably don't want to be using this. It would mean every Kubernetes node fo
 
 Made mainly for fun/to play with multicast DNS.
 
+## Configuration
+
 There are a few optional environment variables to configure:
 
 - `LOG_LEVEL` - Pino log level. Defaults to `info`. Must be one of `fatal`, `error`, `warn`, `info`, `debug`, `trace` or `silent`.
